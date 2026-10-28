@@ -25,7 +25,7 @@ export const CustomizerModal: React.FC<CustomizerModalProps> = ({
 
   const skinColors = [
     { label: 'Персиковая (Мой скин)', color: '#e5c298' },
-    { label: 'Roblox Yellow', color: '#fed000' },
+    { label: 'Blox Yellow', color: '#fed000' },
     { label: 'Загар', color: '#f5d0a9' },
     { label: 'Светлая', color: '#ffdfba' },
     { label: 'Смуглая', color: '#8d5524' },
@@ -256,7 +256,7 @@ export const CustomizerModal: React.FC<CustomizerModalProps> = ({
                   {skin.backpack === 'fuel_jetpack'
                     ? '🚀 Джетпак FUEL'
                     : skin.backpack === 'roblox_classic'
-                    ? '🎒 Рюкзак Roblox'
+                    ? '🎒 Рюкзак Blox'
                     : skin.backpack === 'treasure_pack'
                     ? '💎 Сундук Сокровищ'
                     : 'Без рюкзака'}
@@ -328,7 +328,7 @@ export const CustomizerModal: React.FC<CustomizerModalProps> = ({
                   <div className="flex items-center gap-1.5">
                     <Flame size={15} className="text-amber-400 shrink-0" />
                     <span className="font-black text-sm text-white truncate">
-                      Мой Скин из Roblox
+                      Мой Скин Blox
                     </span>
                     {isMyCustomSkinActive && (
                       <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[10px] font-black">
@@ -495,7 +495,7 @@ export const CustomizerModal: React.FC<CustomizerModalProps> = ({
                       : 'bg-slate-950/60 border-slate-800 text-slate-400'
                   }`}
                 >
-                  🎒 Рюкзак Roblox
+                  🎒 Рюкзак Blox
                 </button>
                 <button
                   type="button"

@@ -21,6 +21,7 @@ import {
   Edit3,
   Dices,
   X,
+  MessageSquare,
 } from 'lucide-react';
 import { CharacterSkin, GameId, MultiplayerMode, MultiplayerSessionConfig } from '../game/types';
 
@@ -37,6 +38,7 @@ interface TitleScreenProps {
   onChangeSessionConfig: (config: MultiplayerSessionConfig) => void;
   onlineCount: number;
   isConnected: boolean;
+  onOpenFeedback: () => void;
 }
 
 export const TitleScreen: React.FC<TitleScreenProps> = ({
@@ -52,6 +54,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   onChangeSessionConfig,
   onlineCount,
   isConnected,
+  onOpenFeedback,
 }) => {
   const [activeTab, setActiveTab] = useState<'games' | 'servers'>('games');
   const [roomCodeInput, setRoomCodeInput] = useState(
@@ -170,9 +173,6 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             <div className="flex flex-col">
               <span className="font-black tracking-wider text-base sm:text-lg leading-none text-white">
                 BLOX HUB
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">
-                Главное меню Roblox
               </span>
             </div>
           </div>
@@ -584,7 +584,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                   <span className={`px-2 py-0.5 rounded text-white text-[10px] font-black uppercase tracking-wider ${
                     selectedGame === 'lava_survival' ? 'bg-orange-600' : 'bg-red-600'
                   }`}>
-                    {selectedGame === 'lava_survival' ? 'ВЫЖИВАНИЕ ROBLOX' : 'ХИТ ROBLOX'}
+                    {selectedGame === 'lava_survival' ? 'ВЫЖИВАНИЕ BLOX' : 'ХИТ BLOX'}
                   </span>
                   <h2 className="text-xl sm:text-2xl font-black text-white drop-shadow mt-0.5">
                     {selectedGame === 'lava_survival'
@@ -760,10 +760,17 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
       </div>
 
       {/* Footer Control Hint Bar */}
-      <footer className="w-full px-4 py-2.5 text-center text-xs text-slate-400 border-t border-slate-900 bg-slate-950/90 shrink-0">
-        <span>
-          WASD / Джойстик Бег · Пробел Прыжок · 🎒 [B] Рюкзак Roblox · 1-7 Предметы · F Полный экран
+      <footer className="w-full px-4 py-2.5 flex items-center justify-between text-xs text-slate-400 border-t border-slate-900 bg-slate-950/90 shrink-0">
+        <span className="flex-1 text-center sm:text-left">
+          WASD / Джойстик Бег · Пробел Прыжок · 🎒 [B] Рюкзак Blox · 1-7 Предметы · F Полный экран
         </span>
+        <button
+          onClick={onOpenFeedback}
+          className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 font-bold transition-colors cursor-pointer"
+        >
+          <MessageSquare size={14} />
+          <span>Feedback</span>
+        </button>
       </footer>
     </div>
   );

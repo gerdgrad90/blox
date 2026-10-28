@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Play, RotateCcw, Home, Sparkles, Volume2, VolumeX, Maximize, Minimize } from 'lucide-react';
+import { Play, RotateCcw, Home, Sparkles, Volume2, VolumeX, Maximize, Minimize, MessageSquare } from 'lucide-react';
 import { PlayerStats } from '../game/types';
 
 interface PauseModalProps {
@@ -13,6 +13,7 @@ interface PauseModalProps {
   onToggleMute: () => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  onOpenFeedback: () => void;
 }
 
 export const PauseModal: React.FC<PauseModalProps> = ({
@@ -25,6 +26,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
   onToggleMute,
   isFullscreen,
   onToggleFullscreen,
+  onOpenFeedback,
 }) => {
   return (
     <motion.div
@@ -120,23 +122,32 @@ export const PauseModal: React.FC<PauseModalProps> = ({
             <span>{isFullscreen ? 'Выйти из полного экрана [F]' : 'Полный экран [F]'}</span>
           </motion.button>
 
-          <div className="flex gap-2 w-full mt-1">
+          <div className="grid grid-cols-3 gap-2 w-full mt-1">
             <motion.button
               whileTap={{ scale: 0.96 }}
               onClick={onToggleMute}
-              className="flex-1 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-300 font-semibold text-xs border border-slate-800 flex items-center justify-center gap-1.5 cursor-pointer"
+              className="py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-300 font-semibold text-xs border border-slate-800 flex flex-col items-center justify-center gap-1 cursor-pointer"
             >
               {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-              <span>{isMuted ? 'Звук: Выкл' : 'Звук: Вкл'}</span>
+              <span>Звук</span>
+            </motion.button>
+
+            <motion.button
+              whileTap={{ scale: 0.96 }}
+              onClick={onOpenFeedback}
+              className="py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-blue-400 font-semibold text-xs border border-slate-800 flex flex-col items-center justify-center gap-1 cursor-pointer"
+            >
+              <MessageSquare size={16} />
+              <span>Feedback</span>
             </motion.button>
 
             <motion.button
               whileTap={{ scale: 0.96 }}
               onClick={onReturnToTitle}
-              className="flex-1 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-300 font-semibold text-xs border border-slate-800 flex items-center justify-center gap-1.5 cursor-pointer"
+              className="py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-300 font-semibold text-xs border border-slate-800 flex flex-col items-center justify-center gap-1 cursor-pointer"
             >
               <Home size={16} />
-              <span>В главное меню</span>
+              <span>Меню</span>
             </motion.button>
           </div>
         </motion.div>

@@ -67,6 +67,7 @@ interface GameHUDProps {
   sessionConfig: MultiplayerSessionConfig;
   remotePlayers: RemotePlayerInfo[];
   isConnected: boolean;
+  onOpenFeedback: () => void;
 }
 
 interface InventoryItem {
@@ -105,6 +106,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   sessionConfig,
   remotePlayers,
   isConnected,
+  onOpenFeedback,
 }) => {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [isBackpackOpen, setIsBackpackOpen] = useState(false);
@@ -124,7 +126,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       icon: <Sword size={22} className="text-amber-300" />,
       tag: 'Оружие',
       tagColor: 'bg-amber-500/20 text-amber-300 border-amber-400/40',
-      description: 'Классический золотой меч Roblox для боя и разрушения преград.',
+      description: 'Классический золотой меч Blox для боя и разрушения преград.',
       boostText: 'Урон 25 · Взмах ЛКМ',
     },
     {
@@ -190,7 +192,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       icon: <Music size={22} className="text-pink-400" />,
       tag: 'Эмоция',
       tagColor: 'bg-pink-500/20 text-pink-300 border-pink-400/40',
-      description: 'Праздничный танец Roblox для празднования прохождения этапа!',
+      description: 'Праздничный танец Blox для празднования прохождения этапа!',
       boostText: 'Анимация танца',
     },
   ];
@@ -284,7 +286,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             type="button"
             data-testid="roblox-backpack-btn"
             onClick={() => setIsBackpackOpen((prev) => !prev)}
-            title="Открыть Рюкзак Roblox [B]"
+            title="Открыть Рюкзак Blox [B]"
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border shadow-lg cursor-pointer transition-all ${
               isBackpackOpen
                 ? 'bg-amber-500 border-amber-300 text-slate-950 font-black'
@@ -383,6 +385,15 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           >
             <Pause size={17} />
           </button>
+
+          {/* Feedback Button */}
+          <button
+            onClick={onOpenFeedback}
+            title="Оставить отзыв"
+            className="p-2 rounded-xl bg-slate-900/85 hover:bg-slate-800 border border-blue-500/30 text-blue-400 shadow-md cursor-pointer transition-all"
+          >
+            <MessageSquare size={17} />
+          </button>
         </div>
       </div>
 
@@ -405,7 +416,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 </div>
                 <div>
                   <h3 className="font-black text-base sm:text-lg text-white leading-none">
-                    Рюкзак Roblox (Инвентарь)
+                    Рюкзак Blox (Инвентарь)
                   </h3>
                   <span className="text-[11px] text-slate-400 font-semibold">
                     Нажмите на предмет или клавиши 1-7 на клавиатуре

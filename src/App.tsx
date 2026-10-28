@@ -22,6 +22,7 @@ import { GameHUD } from './components/GameHUD';
 import { CustomizerModal } from './components/CustomizerModal';
 import { PauseModal } from './components/PauseModal';
 import { VictoryModal } from './components/VictoryModal';
+import { FeedbackModal } from './components/FeedbackModal';
 
 export default function App() {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -32,6 +33,7 @@ export default function App() {
   // Game state machine
   const [gameState, setGameState] = useState<GameState>('title');
   const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(sound.isMuted());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isTouchMode, setIsTouchMode] = useState<boolean>(() => {
@@ -516,6 +518,7 @@ export default function App() {
           onChangeSessionConfig={applyMultiplayerSession}
           onlineCount={onlineCount}
           isConnected={isConnected}
+          onOpenFeedback={() => setIsFeedbackOpen(true)}
         />
       )}
 
@@ -544,6 +547,7 @@ export default function App() {
           sessionConfig={sessionConfig}
           remotePlayers={remotePlayers}
           isConnected={isConnected}
+          onOpenFeedback={() => setIsFeedbackOpen(true)}
         />
       )}
 
@@ -561,6 +565,7 @@ export default function App() {
             onToggleMute={handleToggleMute}
             isFullscreen={isFullscreen}
             onToggleFullscreen={handleToggleFullscreen}
+            onOpenFeedback={() => setIsFeedbackOpen(true)}
           />
         )}
       </AnimatePresence>
@@ -583,6 +588,15 @@ export default function App() {
             currentSkin={skin}
             onSave={handleSaveSkin}
             onClose={() => setIsCustomizerOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isFeedbackOpen && (
+          <FeedbackModal
+            key="feedback-modal"
+            onClose={() => setIsFeedbackOpen(false)}
           />
         )}
       </AnimatePresence>

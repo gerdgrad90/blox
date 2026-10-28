@@ -49,7 +49,7 @@ export const AchievementsModal: React.FC<AchievementsModalProps> = ({ unlockedMa
               <Trophy size={22} />
             </div>
             <div>
-              <h2 className="text-lg sm:text-xl font-bold text-white">Достижения (Roblox Badges)</h2>
+              <h2 className="text-lg sm:text-xl font-bold text-white">Достижения (Blox Badges)</h2>
               <p className="text-xs text-slate-400">
                 Разблокировано: <strong className="text-amber-300 font-bold">{unlockedCount} из {totalCount}</strong> · Получено <strong className="text-amber-300 font-bold">{totalCoinsEarned} 🪙</strong>
               </p>
