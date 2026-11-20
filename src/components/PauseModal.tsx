@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Play, RotateCcw, Home, Sparkles, Volume2, VolumeX, Maximize, Minimize, MessageSquare } from 'lucide-react';
+import { Play, RotateCcw, Home, Sparkles, Volume2, VolumeX, Maximize, Minimize, MessageSquare, Crown, Keyboard, UserCheck } from 'lucide-react';
 import { PlayerStats } from '../game/types';
 
 interface PauseModalProps {
@@ -14,6 +14,11 @@ interface PauseModalProps {
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
   onOpenFeedback: () => void;
+  onOpenControls?: () => void;
+  onOpenAdmin?: () => void;
+  onOpenAuth?: () => void;
+  accountUsername?: string | null;
+  isAdmin?: boolean;
 }
 
 export const PauseModal: React.FC<PauseModalProps> = ({
@@ -27,6 +32,11 @@ export const PauseModal: React.FC<PauseModalProps> = ({
   isFullscreen,
   onToggleFullscreen,
   onOpenFeedback,
+  onOpenControls,
+  onOpenAdmin,
+  onOpenAuth,
+  accountUsername,
+  isAdmin,
 }) => {
   return (
     <motion.div
@@ -43,7 +53,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
         exit={{ opacity: 0, scale: 0.92, y: 18 }}
         transition={{ type: 'spring', stiffness: 400, damping: 28, mass: 0.85 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-3xl bg-slate-900 border-2 border-slate-700 shadow-2xl p-6 flex flex-col items-center text-center"
+        className="w-full max-w-md max-h-[92dvh] overflow-y-auto rounded-3xl bg-slate-900 border-2 border-slate-700 shadow-2xl p-4 sm:p-6 flex flex-col items-center text-center"
       >
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -111,6 +121,46 @@ export const PauseModal: React.FC<PauseModalProps> = ({
             <Sparkles size={18} className="text-amber-400" />
             <span>Гардероб / Скин</span>
           </motion.button>
+
+          {/* Admin Panel button (password protected) */}
+          {onOpenAdmin && (
+            <motion.button
+              whileHover={{ scale: 1.015 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={onOpenAdmin}
+              className={`w-full py-3 rounded-2xl font-black text-sm active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2 cursor-pointer border ${
+                isAdmin
+                  ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-[0_4px_0_#b45309] hover:shadow-[0_2px_0_#b45309] border-amber-300'
+                  : 'bg-slate-800 hover:bg-slate-700 text-amber-300 shadow-[0_4px_0_#0f172a] hover:shadow-[0_2px_0_#0f172a] border-amber-500/40'
+              }`}
+            >
+              <Crown size={18} />
+              <span>Панель Администратора {isAdmin ? '[F2]' : '🔒'}</span>
+            </motion.button>
+          )}
+
+          {/* Controls Config Button */}
+          <motion.button
+            whileHover={{ scale: 1.015 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={onOpenControls}
+            className="w-full py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm shadow-[0_4px_0_#0f172a] hover:shadow-[0_2px_0_#0f172a] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2 cursor-pointer border border-slate-700"
+          >
+            <Keyboard size={18} className="text-sky-400" />
+            <span>Настройка управления</span>
+          </motion.button>
+
+          {onOpenAuth && (
+            <motion.button
+              whileHover={{ scale: 1.015 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={onOpenAuth}
+              className="w-full py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm shadow-[0_4px_0_#0f172a] hover:shadow-[0_2px_0_#0f172a] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2 cursor-pointer border border-slate-700"
+            >
+              <UserCheck size={18} className="text-emerald-400" />
+              <span>{accountUsername ? `Аккаунт: ${accountUsername}` : 'Войти / Создать аккаунт'}</span>
+            </motion.button>
+          )}
 
           <motion.button
             whileHover={{ scale: 1.015 }}

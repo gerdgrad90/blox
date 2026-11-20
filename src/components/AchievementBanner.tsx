@@ -1,32 +1,45 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, Award, X, Sparkles } from 'lucide-react';
+import { Trophy, Award, X, Sparkles, Tag } from 'lucide-react';
 import { Achievement } from '../game/types';
+import { getTitleForAchievement } from '../game/titles';
+import { PlayerTitleBadge } from './PlayerTitleBadge';
 
 interface AchievementBannerProps {
   achievement: Achievement | null;
+  equippedTitleId?: string | null;
+  onEquipTitle?: (titleId: string) => void;
   onDismiss: () => void;
 }
 
-export const AchievementBanner: React.FC<AchievementBannerProps> = ({ achievement, onDismiss }) => {
+export const AchievementBanner: React.FC<AchievementBannerProps> = ({
+  achievement,
+  equippedTitleId,
+  onEquipTitle,
+  onDismiss,
+}) => {
   useEffect(() => {
     if (!achievement) return;
     const timer = setTimeout(() => {
       onDismiss();
-    }, 5500);
+    }, 6500);
     return () => clearTimeout(timer);
   }, [achievement, onDismiss]);
+
+  const unlockedTitle = achievement ? getTitleForAchievement(achievement.id) : null;
+  const isAlreadyEquipped = Boolean(unlockedTitle && equippedTitleId === unlockedTitle.id);
 
   return (
     <AnimatePresence>
       {achievement && (
         <motion.div
           key={achievement.id}
+          data-testid="achievement-banner"
           initial={{ opacity: 0, y: -40, scale: 0.9, rotateX: 15 }}
           animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
           exit={{ opacity: 0, y: -30, scale: 0.9 }}
           transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-          className="fixed top-5 right-4 sm:right-6 z-50 pointer-events-auto max-w-[360px] sm:max-w-[420px] w-full"
+          className="fixed top-3 sm:top-5 inset-x-3 sm:inset-x-auto sm:right-6 z-50 pointer-events-auto sm:max-w-[440px] sm:w-full pt-safe"
         >
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-2 border-amber-400 shadow-[0_10px_35px_rgba(251,191,36,0.35)] p-3.5 sm:p-4 text-white backdrop-blur-xl">
             {/* Ambient Shimmer Light */}
@@ -60,12 +73,30 @@ export const AchievementBanner: React.FC<AchievementBannerProps> = ({ achievemen
                   {achievement.description}
                 </p>
 
-                {/* Reward pill */}
-                <div className="flex items-center gap-2 mt-2">
+                {/* Rewards & Unlocked Title */}
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
                   <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-[10px] font-black text-amber-300 flex items-center gap-1">
                     <Trophy size={10} />
-                    <span>Награда: +{achievement.rewardCoins} 🪙</span>
+                    <span>+{achievement.rewardCoins} 🪙</span>
                   </span>
+                  {unlockedTitle && (
+                    <>
+                      <PlayerTitleBadge title={unlockedTitle} size="xs" />
+                      {onEquipTitle && !isAlreadyEquipped && (
+                        <button
+                          type="button"
+                          onClick={() => onEquipTitle(unlockedTitle.id)}
+                          className="px-2 py-0.5 rounded-md bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[10px] font-black inline-flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Tag size={10} />
+                          <span>Надеть</span>
+                        </button>
+                      )}
+                      {isAlreadyEquipped && (
+                        <span className="text-[10px] font-bold text-emerald-400">Надет ✓</span>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -85,7 +116,7 @@ export const AchievementBanner: React.FC<AchievementBannerProps> = ({ achievemen
               <motion.div
                 initial={{ width: '100%' }}
                 animate={{ width: '0%' }}
-                transition={{ duration: 5.5, ease: 'linear' }}
+                transition={{ duration: 6.5, ease: 'linear' }}
                 className="h-full bg-gradient-to-r from-amber-500 to-yellow-300"
               />
             </div>

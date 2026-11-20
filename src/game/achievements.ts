@@ -98,3 +98,61 @@ export function saveUnlockedAchievement(id: string): Record<string, number> {
   }
   return current;
 }
+
+export function mergeUnlockedAchievements(
+  remoteMap?: Record<string, number> | null
+): Record<string, number> {
+  const current = getStoredUnlockedAchievements();
+  if (!remoteMap || typeof remoteMap !== 'object') return current;
+  let changed = false;
+  for (const [id, ts] of Object.entries(remoteMap)) {
+    if (ACHIEVEMENTS_REGISTRY[id] && typeof ts === 'number' && Number.isFinite(ts) && ts > 0) {
+      if (!current[id] || ts < current[id]) {
+        current[id] = ts;
+        changed = true;
+      }
+    }
+  }
+  if (changed && typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+    } catch {}
+  }
+  return current;
+}
+
+const LIFETIME_COUNTERS_KEY = 'blox_lifetime_counters_v1';
+
+export interface StoredLifetimeCounters {
+  totalJumps: number;
+  totalDeaths: number;
+}
+
+export function getStoredLifetimeCounters(): StoredLifetimeCounters {
+  if (typeof window === 'undefined') return { totalJumps: 0, totalDeaths: 0 };
+  try {
+    const raw = localStorage.getItem(LIFETIME_COUNTERS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        totalJumps: Math.max(0, Math.floor(Number(parsed?.totalJumps) || 0)),
+        totalDeaths: Math.max(0, Math.floor(Number(parsed?.totalDeaths) || 0)),
+      };
+    }
+  } catch {}
+  return { totalJumps: 0, totalDeaths: 0 };
+}
+
+export function saveLifetimeCounters(counters: StoredLifetimeCounters): StoredLifetimeCounters {
+  const clean: StoredLifetimeCounters = {
+    totalJumps: Math.max(0, Math.floor(Number(counters.totalJumps) || 0)),
+    totalDeaths: Math.max(0, Math.floor(Number(counters.totalDeaths) || 0)),
+  };
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(LIFETIME_COUNTERS_KEY, JSON.stringify(clean));
+    } catch {}
+  }
+  return clean;
+}
+

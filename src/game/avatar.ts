@@ -1,11 +1,16 @@
 import * as THREE from 'three';
 import { CharacterSkin, ToolType, ShirtOutfit, PantsOutfit } from './types';
+import { EmoteId, getEmoteById } from './emotes';
+import { createPortalGunModel3D, PortalKind } from './portals';
+import { PlayerTitle, getPlayerTitleById } from './titles';
 
 export class RobloxAvatar {
   public root: THREE.Group;
+  public bodyPivot: THREE.Group;
   public headGroup: THREE.Group;
   public headMesh: THREE.Mesh;
   public torsoMesh: THREE.Mesh;
+  public torsoGearGroup: THREE.Group;
   public backpackGroup: THREE.Group;
   public leftArmGroup: THREE.Group;
   public leftArmMesh: THREE.Mesh;
@@ -25,6 +30,9 @@ export class RobloxAvatar {
   public hammerMesh: THREE.Group;
   public jetpackRemoteMesh: THREE.Group;
   public bloxyColaMesh: THREE.Group;
+  public pollenScooperMesh: THREE.Group;
+  public portalGunHandle: ReturnType<typeof createPortalGunModel3D>;
+  public portalGunMesh: THREE.Group;
 
   public hatGroup: THREE.Group;
 
@@ -35,12 +43,20 @@ export class RobloxAvatar {
   private faceTexture: THREE.CanvasTexture | null = null;
   private torsoTexture: THREE.CanvasTexture | null = null;
   private legsTexture: THREE.CanvasTexture | null = null;
+  private leftSleeveTexture: THREE.CanvasTexture | null = null;
+  private rightSleeveTexture: THREE.CanvasTexture | null = null;
+
+  private currentHeadShape: 'round' | 'blocky' = 'round';
 
   // Animation state
   public walkPhase: number = 0;
   public isMoving: boolean = false;
   public isGrounded: boolean = true;
   public isEmoting: boolean = false;
+  public activeEmote: EmoteId | null = null;
+  public emoteTimer: number = 0;
+  public emoteDuration: number = 0;
+  private emoteBubbleSprite: THREE.Sprite | null = null;
   public isAttacking: boolean = false;
   public attackTimer: number = 0;
   public squashY: number = 1;
@@ -49,6 +65,11 @@ export class RobloxAvatar {
   constructor(skin: CharacterSkin) {
     this.root = new THREE.Group();
     this.root.name = 'RobloxAvatar';
+
+    this.bodyPivot = new THREE.Group();
+    this.bodyPivot.name = 'AvatarBodyPivot';
+    this.bodyPivot.position.set(0, 3, 0);
+    this.root.add(this.bodyPivot);
 
     // Base Materials
     this.headMaterial = new THREE.MeshStandardMaterial({
@@ -75,13 +96,18 @@ export class RobloxAvatar {
       metalness: 0.02,
     });
 
-    // 1. Torso (Size: 2 x 2 x 1, centered at y = 3)
+    // 1. Torso (Size: 2 x 2 x 1, centered at y = 3 via bodyPivot)
     const torsoGeo = new THREE.BoxGeometry(2, 2, 1);
     this.torsoMesh = new THREE.Mesh(torsoGeo, this.createTorsoMaterials(skin));
-    this.torsoMesh.position.set(0, 3, 0);
+    this.torsoMesh.position.set(0, 0, 0);
     this.torsoMesh.castShadow = true;
     this.torsoMesh.receiveShadow = true;
-    this.root.add(this.torsoMesh);
+    this.bodyPivot.add(this.torsoMesh);
+
+    // 3D Torso Armor / Tactical Vest Attachments
+    this.torsoGearGroup = new THREE.Group();
+    this.torsoMesh.add(this.torsoGearGroup);
+    this.updateTorsoGear(skin);
 
     // Backpack / Jetpack Group attached to Torso so it moves & breathes with the body
     this.backpackGroup = new THREE.Group();
@@ -89,14 +115,20 @@ export class RobloxAvatar {
     this.torsoMesh.add(this.backpackGroup);
     this.updateBackpack(skin.backpack || 'none');
 
-    // 2. Head (Size: 1.25 x 1.25 x 1.25, centered at y = 4.7)
+    // 2. Head (Size: 1.25 x 1.25 x 1.25 or round sphere, centered at y = 4.7 via bodyPivot)
     this.headGroup = new THREE.Group();
-    this.headGroup.position.set(0, 4.7, 0);
-    this.root.add(this.headGroup);
+    this.headGroup.position.set(0, 1.7, 0);
+    this.bodyPivot.add(this.headGroup);
 
-    const headGeo = new THREE.BoxGeometry(1.25, 1.25, 1.25);
-    const headMaterials = this.createHeadMaterials(skin);
-    this.headMesh = new THREE.Mesh(headGeo, headMaterials);
+    this.currentHeadShape = skin.headShape || 'round';
+    if (this.currentHeadShape === 'round') {
+      const headGeo = new THREE.SphereGeometry(0.66, 32, 24);
+      this.headMesh = new THREE.Mesh(headGeo, this.createRoundHeadMaterial(skin));
+      this.headMesh.rotation.y = -Math.PI * 0.5;
+    } else {
+      const headGeo = new THREE.BoxGeometry(1.25, 1.25, 1.25);
+      this.headMesh = new THREE.Mesh(headGeo, this.createHeadMaterials(skin));
+    }
     this.headMesh.castShadow = true;
     this.headGroup.add(this.headMesh);
 
@@ -106,10 +138,10 @@ export class RobloxAvatar {
     this.headGroup.add(this.hatGroup);
     this.updateHat(skin.hat, skin.skinColor);
 
-    // 3. Left Arm (Pivot at shoulder: x = -1.5, y = 4.0, z = 0)
+    // 3. Left Arm (Pivot at shoulder: x = -1.5, y = 4.0 -> +1.0 relative to bodyPivot)
     this.leftArmGroup = new THREE.Group();
-    this.leftArmGroup.position.set(-1.5, 4.0, 0);
-    this.root.add(this.leftArmGroup);
+    this.leftArmGroup.position.set(-1.5, 1.0, 0);
+    this.bodyPivot.add(this.leftArmGroup);
 
     const armGeo = new THREE.BoxGeometry(1, 2, 1);
     this.leftArmMesh = new THREE.Mesh(armGeo, this.headMaterial);
@@ -124,10 +156,10 @@ export class RobloxAvatar {
     this.leftHandMesh.castShadow = true;
     this.leftArmGroup.add(this.leftHandMesh);
 
-    // 4. Right Arm (Pivot at shoulder: x = 1.5, y = 4.0, z = 0)
+    // 4. Right Arm (Pivot at shoulder: x = 1.5, y = 4.0 -> +1.0 relative to bodyPivot)
     this.rightArmGroup = new THREE.Group();
-    this.rightArmGroup.position.set(1.5, 4.0, 0);
-    this.root.add(this.rightArmGroup);
+    this.rightArmGroup.position.set(1.5, 1.0, 0);
+    this.bodyPivot.add(this.rightArmGroup);
 
     this.rightArmMesh = new THREE.Mesh(armGeo, this.headMaterial);
     this.rightArmMesh.position.set(0, -1, 0);
@@ -151,6 +183,12 @@ export class RobloxAvatar {
     this.hammerMesh = this.createHammer();
     this.jetpackRemoteMesh = this.createJetpackRemote();
     this.bloxyColaMesh = this.createBloxyCola();
+    this.pollenScooperMesh = this.createPollenScooper();
+    this.portalGunHandle = createPortalGunModel3D(5.2);
+    this.portalGunMesh = this.portalGunHandle.root;
+    this.portalGunMesh.rotation.set(0, Math.PI, 0);
+    this.portalGunMesh.position.set(0, -0.05, 0.35);
+    this.portalGunMesh.visible = false;
 
     this.toolMount.add(this.swordMesh);
     this.toolMount.add(this.speedCoilMesh);
@@ -158,11 +196,13 @@ export class RobloxAvatar {
     this.toolMount.add(this.hammerMesh);
     this.toolMount.add(this.jetpackRemoteMesh);
     this.toolMount.add(this.bloxyColaMesh);
+    this.toolMount.add(this.pollenScooperMesh);
+    this.toolMount.add(this.portalGunMesh);
 
-    // 5. Left Leg (Pivot at hip: x = -0.5, y = 2.0, z = 0)
+    // 5. Left Leg (Pivot at hip: x = -0.5, y = 2.0 -> -1.0 relative to bodyPivot)
     this.leftLegGroup = new THREE.Group();
-    this.leftLegGroup.position.set(-0.5, 2.0, 0);
-    this.root.add(this.leftLegGroup);
+    this.leftLegGroup.position.set(-0.5, -1.0, 0);
+    this.bodyPivot.add(this.leftLegGroup);
 
     const legGeo = new THREE.BoxGeometry(1, 2, 1);
     const legMats = this.createLegMaterials(skin);
@@ -172,10 +212,10 @@ export class RobloxAvatar {
     this.leftLegMesh.receiveShadow = true;
     this.leftLegGroup.add(this.leftLegMesh);
 
-    // 6. Right Leg (Pivot at hip: x = 0.5, y = 2.0, z = 0)
+    // 6. Right Leg (Pivot at hip: x = 0.5, y = 2.0 -> -1.0 relative to bodyPivot)
     this.rightLegGroup = new THREE.Group();
-    this.rightLegGroup.position.set(0.5, 2.0, 0);
-    this.root.add(this.rightLegGroup);
+    this.rightLegGroup.position.set(0.5, -1.0, 0);
+    this.bodyPivot.add(this.rightLegGroup);
 
     this.rightLegMesh = new THREE.Mesh(legGeo, legMats);
     this.rightLegMesh.position.set(0, -1, 0);
@@ -190,23 +230,109 @@ export class RobloxAvatar {
     this.setEquippedTool('sword');
 
     // Billboard overhead nameplate
-    this.setNameplate(skin.name);
+    this.setNameplate(skin.name, '#38bdf8', getPlayerTitleById(skin.playerTitleId));
   }
 
-  private getActiveShirt(skin: CharacterSkin): ShirtOutfit {
+  private getActiveShirt(skin: CharacterSkin): string {
     if (skin.shirt) return skin.shirt;
     return skin.outfit === 'rock_jacket' ? 'rock_jacket' : 'custom_shirt';
   }
 
-  private getActivePants(skin: CharacterSkin): PantsOutfit {
+  private getActivePants(skin: CharacterSkin): string {
     if (skin.pants) return skin.pants;
     return skin.outfit === 'rock_jacket' ? 'rock_jeans' : 'custom_pants';
+  }
+
+  private drawEmrDigitalFlora(ctx: CanvasRenderingContext2D, width: number, height: number, seedOffset: number = 0) {
+    ctx.fillStyle = '#384324';
+    ctx.fillRect(0, 0, width, height);
+
+    let seed = (1337 + seedOffset * 97) >>> 0;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+
+    const cell = 6;
+    for (let y = 0; y < height; y += cell) {
+      for (let x = 0; x < width; x += cell) {
+        const n = rand();
+        if (n < 0.28) {
+          ctx.fillStyle = '#232a17';
+          ctx.fillRect(x, y, cell, cell);
+          if (rand() < 0.55 && x + cell < width) {
+            ctx.fillRect(x + cell, y, cell, cell);
+          }
+        } else if (n < 0.48) {
+          ctx.fillStyle = '#4c5933';
+          ctx.fillRect(x, y, cell, cell);
+        } else if (n < 0.57) {
+          ctx.fillStyle = '#5c6b3f';
+          ctx.fillRect(x, y, Math.max(3, cell - 2), Math.max(3, cell - 2));
+        } else if (n < 0.65) {
+          ctx.fillStyle = '#3d3420';
+          ctx.fillRect(x, y, cell, cell);
+        }
+      }
+    }
   }
 
   private applyArmOutfit(skin: CharacterSkin) {
     const shirt = this.getActiveShirt(skin);
 
-    if (shirt === 'rock_jacket') {
+    if (this.leftSleeveTexture) {
+      this.leftSleeveTexture.dispose();
+      this.leftSleeveTexture = null;
+    }
+    if (this.rightSleeveTexture) {
+      this.rightSleeveTexture.dispose();
+      this.rightSleeveTexture = null;
+    }
+
+    if (shirt === 'rus_emr_vest') {
+      const buildEmrSleeveMat = (withFlagPatch: boolean): THREE.MeshStandardMaterial => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d')!;
+        this.drawEmrDigitalFlora(ctx, 128, 256, withFlagPatch ? 11 : 29);
+
+        // Dark cuff seam near wrist
+        ctx.fillStyle = '#222917';
+        ctx.fillRect(0, 212, 128, 8);
+
+        if (withFlagPatch) {
+          // White-Blue-Red tricolor armband/patch on upper sleeve (matching Roblox reference)
+          ctx.fillStyle = '#181c12';
+          ctx.fillRect(0, 44, 128, 50);
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(0, 48, 128, 14);
+          ctx.fillStyle = '#1d4ed8';
+          ctx.fillRect(0, 62, 128, 14);
+          ctx.fillStyle = '#dc2626';
+          ctx.fillRect(0, 76, 128, 14);
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        if (withFlagPatch) {
+          this.leftSleeveTexture = tex;
+        } else {
+          this.rightSleeveTexture = tex;
+        }
+        return new THREE.MeshStandardMaterial({
+          map: tex,
+          roughness: 0.7,
+          metalness: 0.05,
+        });
+      };
+
+      // Viewer-left arm (-X) carries the tricolor sleeve patch in front view
+      this.leftArmMesh.material = buildEmrSleeveMat(true);
+      this.rightArmMesh.material = buildEmrSleeveMat(false);
+      this.leftHandMesh.visible = true;
+      this.rightHandMesh.visible = true;
+    } else if (shirt === 'rock_jacket') {
       this.sleeveMaterial.color.set('#141619');
       this.leftArmMesh.material = this.sleeveMaterial;
       this.rightArmMesh.material = this.sleeveMaterial;
@@ -572,6 +698,27 @@ export class RobloxAvatar {
       ctx.fillRect(0, 226, 256, 30);
       ctx.fillStyle = '#94a3b8';
       ctx.fillRect(116, 232, 24, 18);
+    } else if (shirt === 'rus_emr_vest') {
+      backColor = '#333d22';
+      this.drawEmrDigitalFlora(ctx, 256, 256, 5);
+
+      // Subtle tunic neckline & collar V-opening
+      ctx.fillStyle = '#222a17';
+      ctx.beginPath();
+      ctx.moveTo(92, 0);
+      ctx.lineTo(164, 0);
+      ctx.lineTo(128, 40);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = skin.skinColor;
+      ctx.beginPath();
+      ctx.arc(128, 0, 24, 0, Math.PI);
+      ctx.fill();
+
+      // Shirt button placket shadow
+      ctx.fillStyle = 'rgba(20, 24, 14, 0.35)';
+      ctx.fillRect(122, 24, 12, 232);
     }
 
     this.torsoTexture = new THREE.CanvasTexture(canvas);
@@ -579,15 +726,27 @@ export class RobloxAvatar {
 
     const frontMat = new THREE.MeshStandardMaterial({
       map: this.torsoTexture,
-      roughness: 0.55,
-      metalness: 0.1,
+      roughness: 0.6,
+      metalness: 0.08,
     });
 
     const bodyBackMat = new THREE.MeshStandardMaterial({
       color: new THREE.Color(backColor),
-      roughness: 0.55,
-      metalness: 0.1,
+      roughness: 0.6,
+      metalness: 0.08,
     });
+
+    if (shirt === 'rus_emr_vest') {
+      // Show EMR camo on sides & back too
+      return [
+        frontMat,
+        frontMat,
+        bodyBackMat,
+        bodyBackMat,
+        frontMat,
+        frontMat,
+      ];
+    }
 
     // [+X, -X, +Y, -Y, +Z (front), -Z (back)]
     return [
@@ -598,6 +757,95 @@ export class RobloxAvatar {
       frontMat,
       bodyBackMat,
     ];
+  }
+
+  private updateTorsoGear(skin: CharacterSkin) {
+    while (this.torsoGearGroup.children.length > 0) {
+      this.torsoGearGroup.remove(this.torsoGearGroup.children[0]);
+    }
+
+    const shirt = this.getActiveShirt(skin);
+    if (shirt !== 'rus_emr_vest') return;
+
+    // 3D Olive Heavy Tactical Pouch Vest (Pasha_praser)
+    const vestBaseMat = new THREE.MeshStandardMaterial({ color: 0x2c3422, roughness: 0.72, metalness: 0.08 });
+    const vestDarkMat = new THREE.MeshStandardMaterial({ color: 0x1b2015, roughness: 0.65, metalness: 0.12 });
+    const pouchOliveMat = new THREE.MeshStandardMaterial({ color: 0x36402a, roughness: 0.7, metalness: 0.06 });
+    const magDarkMat = new THREE.MeshStandardMaterial({ color: 0x222620, roughness: 0.55, metalness: 0.18 });
+    const tourniquetRedMat = new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.6 });
+
+    // Front & Back ballistic plate bags
+    const frontPlate = new THREE.Mesh(new THREE.BoxGeometry(1.76, 1.56, 0.22), vestBaseMat);
+    frontPlate.position.set(0, 0.04, 0.56);
+    frontPlate.castShadow = true;
+
+    const backPlate = new THREE.Mesh(new THREE.BoxGeometry(1.74, 1.52, 0.18), vestBaseMat);
+    backPlate.position.set(0, 0.06, -0.54);
+    backPlate.castShadow = true;
+
+    // Cummerbund wrap-around waist belt
+    const cummerbund = new THREE.Mesh(new THREE.BoxGeometry(2.14, 0.58, 1.12), vestBaseMat);
+    cummerbund.position.set(0, -0.40, 0.02);
+    cummerbund.castShadow = true;
+
+    this.torsoGearGroup.add(frontPlate, backPlate, cummerbund);
+
+    // Padded Shoulder Straps over +Y
+    [-0.58, 0.58].forEach((xPos) => {
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.24, 1.24), vestDarkMat);
+      strap.position.set(xPos, 0.94, 0.01);
+      strap.castShadow = true;
+
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.12, 0.72), vestBaseMat);
+      pad.position.set(xPos, 1.02, 0);
+      this.torsoGearGroup.add(strap, pad);
+    });
+
+    // Upper Admin Panel / Velcro Chest Rig Placard
+    const adminPanel = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.44, 0.12), vestDarkMat);
+    adminPanel.position.set(0, 0.44, 0.69);
+    const centerStrap = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.36, 0.14), magDarkMat);
+    centerStrap.position.set(0, 0.46, 0.72);
+    this.torsoGearGroup.add(adminPanel, centerStrap);
+
+    // Row of 4 dark Rifle Magazine Slots across chest
+    const magRack = new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.24, 0.12), pouchOliveMat);
+    magRack.position.set(0, 0.02, 0.70);
+    this.torsoGearGroup.add(magRack);
+
+    [-0.42, -0.14, 0.14, 0.42].forEach((mx) => {
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.40, 0.11), magDarkMat);
+      mag.position.set(mx, 0.14, 0.71);
+      this.torsoGearGroup.add(mag);
+    });
+
+    // Row of 3 heavy boxy Olive Utility / Mag Pouches on front waist
+    [-0.48, 0, 0.48].forEach((px) => {
+      const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.43, 0.56, 0.22), pouchOliveMat);
+      pouch.position.set(px, -0.44, 0.73);
+      pouch.castShadow = true;
+
+      const flap = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.18, 0.24), vestDarkMat);
+      flap.position.set(px, -0.24, 0.74);
+      this.torsoGearGroup.add(pouch, flap);
+    });
+
+    // Side Hip Pouches (left & right cummerbund flanks)
+    const leftSidePouch = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.50, 0.32), pouchOliveMat);
+    leftSidePouch.position.set(-0.98, -0.42, 0.50);
+    leftSidePouch.castShadow = true;
+
+    const rightRadioPouch = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.56, 0.34), pouchOliveMat);
+    rightRadioPouch.position.set(0.98, -0.40, 0.48);
+    rightRadioPouch.castShadow = true;
+
+    const tourniquetAccent = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.26, 0.16), tourniquetRedMat);
+    tourniquetAccent.position.set(1.06, -0.42, 0.38);
+
+    const radioAntenna = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28, 0.05), vestDarkMat);
+    radioAntenna.position.set(1.00, 0.02, 0.50);
+
+    this.torsoGearGroup.add(leftSidePouch, rightRadioPouch, tourniquetAccent, radioAntenna);
   }
 
   private createLegMaterials(skin: CharacterSkin): THREE.Material | THREE.Material[] {
@@ -745,6 +993,34 @@ export class RobloxAvatar {
       ctx.fillRect(0, 218, 128, 38);
       ctx.fillStyle = '#475569';
       ctx.fillRect(16, 224, 30, 4);
+    } else if (pants === 'rus_emr_pants') {
+      topColor = 0x384324;
+      soleColor = 0x090a0c;
+
+      // Russian EMR Digital Flora pixel camouflage
+      this.drawEmrDigitalFlora(ctx, 128, 256, 47);
+
+      // Cargo thigh pocket flap & seam lines
+      ctx.fillStyle = 'rgba(18, 24, 12, 0.42)';
+      ctx.fillRect(14, 96, 100, 8);
+      ctx.strokeStyle = 'rgba(18, 24, 12, 0.35)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(16, 102, 96, 44);
+
+      // Subtle dark waistband at hip
+      ctx.fillStyle = '#1b2113';
+      ctx.fillRect(0, 0, 128, 14);
+
+      // Black tactical combat boots
+      ctx.fillStyle = '#141619';
+      ctx.fillRect(0, 206, 128, 40);
+      ctx.fillStyle = '#26292e';
+      ctx.fillRect(18, 212, 92, 6);
+      ctx.fillRect(36, 224, 56, 4);
+      ctx.fillRect(36, 234, 56, 4);
+      // Heavy black combat boot sole
+      ctx.fillStyle = '#090a0c';
+      ctx.fillRect(0, 244, 128, 12);
     }
 
     this.legsTexture = new THREE.CanvasTexture(canvas);
@@ -811,7 +1087,7 @@ export class RobloxAvatar {
       ctx.quadraticCurveTo(106, 144, 126, 158);
       ctx.quadraticCurveTo(146, 172, 168, 150);
       ctx.stroke();
-    } else if (skin.face === 'smile') {
+    } else if (skin.face === 'smile' || skin.face === 'happy') {
       // Classic Roblox Oval Eyes
       ctx.beginPath();
       ctx.ellipse(75, 95, 14, 22, 0, 0, Math.PI * 2);
@@ -843,7 +1119,7 @@ export class RobloxAvatar {
       ctx.beginPath();
       ctx.arc(140, 150, 40, 0.1 * Math.PI, 0.6 * Math.PI);
       ctx.stroke();
-    } else if (skin.face === 'determined') {
+    } else if (skin.face === 'determined' || skin.face === 'tough') {
       // Brows
       ctx.beginPath();
       ctx.moveTo(55, 75);
@@ -860,6 +1136,61 @@ export class RobloxAvatar {
       ctx.beginPath();
       ctx.moveTo(90, 160);
       ctx.lineTo(166, 160);
+      ctx.stroke();
+    } else if (skin.face === 'xd') {
+      // Laughing > < eyes + wide D grin
+      ctx.beginPath();
+      ctx.moveTo(56, 80);
+      ctx.lineTo(96, 100);
+      ctx.lineTo(56, 120);
+      ctx.moveTo(200, 80);
+      ctx.lineTo(160, 100);
+      ctx.lineTo(200, 120);
+      ctx.stroke();
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.arc(128, 148, 44, 0, Math.PI);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (skin.face === 'eye_scar') {
+      // Eye Scar - Dynamic Head (Pasha_praser): furrowed sharp brows, dark intense eyes, eye scar, flat mouth
+      ctx.lineWidth = 10;
+      ctx.strokeStyle = '#111827';
+      ctx.beginPath();
+      ctx.moveTo(64, 80);
+      ctx.lineTo(108, 96);
+      ctx.moveTo(192, 80);
+      ctx.lineTo(148, 96);
+      ctx.stroke();
+
+      // Dark intense eyes
+      ctx.fillStyle = '#0c0f14';
+      ctx.beginPath();
+      ctx.arc(92, 108, 11, 0, Math.PI * 2);
+      ctx.arc(164, 108, 11, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(89, 104, 2.5, 0, Math.PI * 2);
+      ctx.arc(161, 104, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Thin vertical scar below viewer-right eye
+      ctx.strokeStyle = '#9a6648';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(166, 122);
+      ctx.lineTo(164, 154);
+      ctx.stroke();
+
+      // Serious horizontal mouth
+      ctx.strokeStyle = '#18181b';
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(86, 168);
+      ctx.lineTo(170, 168);
       ctx.stroke();
     } else {
       // Derp / Silly
@@ -892,21 +1223,216 @@ export class RobloxAvatar {
     ];
   }
 
+  private createRoundHeadMaterial(skin: CharacterSkin): THREE.MeshStandardMaterial {
+    if (this.faceTexture) {
+      this.faceTexture.dispose();
+      this.faceTexture = null;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+
+    // Uniform background matching skin color around entire sphere
+    ctx.fillStyle = skin.skinColor;
+    ctx.fillRect(0, 0, 512, 256);
+
+    // Front of round head (+Z) is centered at x=256, y=128
+    ctx.fillStyle = '#111827';
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (skin.face === 'squiggly') {
+      // User's Roblox Face: Dark peeking eyes + iconic squiggly/wavy mouth (`~`)
+      ctx.beginPath();
+      ctx.ellipse(236, 106, 9, 14, 0, 0, Math.PI * 2);
+      ctx.ellipse(276, 106, 9, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Wavy squiggly mouth (`~`) matching the screenshot
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(228, 154);
+      ctx.quadraticCurveTo(242, 142, 256, 152);
+      ctx.quadraticCurveTo(270, 162, 284, 148);
+      ctx.stroke();
+    } else if (skin.face === 'smile' || skin.face === 'happy') {
+      // Classic Roblox Oval Eyes
+      ctx.beginPath();
+      ctx.ellipse(232, 108, 10, 16, 0, 0, Math.PI * 2);
+      ctx.ellipse(280, 108, 10, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Catchlights
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(229, 103, 3.5, 0, Math.PI * 2);
+      ctx.arc(277, 103, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Classic Curved Smile
+      ctx.beginPath();
+      ctx.arc(256, 136, 36, 0.22 * Math.PI, 0.78 * Math.PI);
+      ctx.stroke();
+    } else if (skin.face === 'cool') {
+      // Sunglasses
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(210, 96, 40, 26);
+      ctx.fillRect(262, 96, 40, 26);
+      ctx.fillRect(248, 102, 16, 8);
+
+      // Lens shine
+      ctx.fillStyle = '#60a5fa';
+      ctx.fillRect(214, 100, 32, 5);
+      ctx.fillRect(266, 100, 32, 5);
+
+      // Smug smile
+      ctx.beginPath();
+      ctx.arc(262, 148, 26, 0.1 * Math.PI, 0.6 * Math.PI);
+      ctx.stroke();
+    } else if (skin.face === 'determined' || skin.face === 'tough') {
+      // Brows
+      ctx.beginPath();
+      ctx.moveTo(218, 96);
+      ctx.lineTo(246, 106);
+      ctx.moveTo(294, 96);
+      ctx.lineTo(266, 106);
+      ctx.stroke();
+
+      // Eyes
+      ctx.beginPath();
+      ctx.arc(233, 114, 8, 0, Math.PI * 2);
+      ctx.arc(279, 114, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Straight grin
+      ctx.beginPath();
+      ctx.moveTo(236, 154);
+      ctx.lineTo(276, 154);
+      ctx.stroke();
+    } else if (skin.face === 'xd') {
+      // Laughing > < eyes + open grin
+      ctx.beginPath();
+      ctx.moveTo(216, 98);
+      ctx.lineTo(240, 110);
+      ctx.lineTo(216, 122);
+      ctx.moveTo(296, 98);
+      ctx.lineTo(272, 110);
+      ctx.lineTo(296, 122);
+      ctx.stroke();
+
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.arc(256, 142, 30, 0, Math.PI);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (skin.face === 'eye_scar') {
+      // Eye Scar - Dynamic Head (Pasha_praser)
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#111827';
+      ctx.beginPath();
+      ctx.moveTo(220, 96);
+      ctx.lineTo(247, 107);
+      ctx.moveTo(292, 96);
+      ctx.lineTo(265, 107);
+      ctx.stroke();
+
+      // Dark eyes
+      ctx.fillStyle = '#0c0f14';
+      ctx.beginPath();
+      ctx.arc(237, 114, 7.5, 0, Math.PI * 2);
+      ctx.arc(275, 114, 7.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(235, 111, 2, 0, Math.PI * 2);
+      ctx.arc(273, 111, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Subtle vertical scar under viewer-right eye
+      ctx.strokeStyle = '#9a6648';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(277, 124);
+      ctx.lineTo(275, 146);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255, 232, 214, 0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(279.5, 125);
+      ctx.lineTo(277.5, 145);
+      ctx.stroke();
+
+      // Straight serious mouth
+      ctx.strokeStyle = '#18181b';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(230, 155);
+      ctx.lineTo(282, 155);
+      ctx.stroke();
+    } else {
+      // Derp / Silly
+      ctx.beginPath();
+      ctx.arc(230, 108, 13, 0, Math.PI * 2);
+      ctx.arc(282, 108, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(256, 148, 22, 0, Math.PI);
+      ctx.stroke();
+    }
+
+    this.faceTexture = new THREE.CanvasTexture(canvas);
+    this.faceTexture.colorSpace = THREE.SRGBColorSpace;
+
+    return new THREE.MeshStandardMaterial({
+      map: this.faceTexture,
+      roughness: 0.6,
+      metalness: 0.05,
+    });
+  }
+
   public updateSkin(skin: CharacterSkin) {
     this.headMaterial.color.set(skin.skinColor);
     this.torsoMaterial.color.set(skin.torsoColor);
     this.legsMaterial.color.set(skin.legsColor);
 
-    this.headMesh.material = this.createHeadMaterials(skin);
+    const targetHeadShape: 'round' | 'blocky' = skin.headShape || 'round';
+    if (targetHeadShape !== this.currentHeadShape) {
+      this.currentHeadShape = targetHeadShape;
+      this.headMesh.geometry.dispose();
+
+      if (targetHeadShape === 'round') {
+        this.headMesh.geometry = new THREE.SphereGeometry(0.66, 32, 24);
+        this.headMesh.rotation.y = -Math.PI * 0.5;
+      } else {
+        this.headMesh.geometry = new THREE.BoxGeometry(1.25, 1.25, 1.25);
+        this.headMesh.rotation.y = 0;
+      }
+    }
+
+    if (this.currentHeadShape === 'round') {
+      this.headMesh.material = this.createRoundHeadMaterial(skin);
+    } else {
+      this.headMesh.material = this.createHeadMaterials(skin);
+    }
+
     this.torsoMesh.material = this.createTorsoMaterials(skin);
     const legMats = this.createLegMaterials(skin);
     this.leftLegMesh.material = legMats;
     this.rightLegMesh.material = legMats;
 
     this.applyArmOutfit(skin);
+    this.updateTorsoGear(skin);
     this.updateHat(skin.hat, skin.skinColor);
     this.updateBackpack(skin.backpack || 'none');
-    this.setNameplate(skin.name);
+    this.setNameplate(skin.name, '#38bdf8', getPlayerTitleById(skin.playerTitleId));
   }
 
   public updateHat(hat: CharacterSkin['hat'], skinColor: string = '#e5c298') {
@@ -988,7 +1514,7 @@ export class RobloxAvatar {
       visorMesh.position.set(0, -0.12, 0.85);
       visorMesh.castShadow = true;
       this.hatGroup.add(crownMesh, visorMesh);
-    } else if (hat === 'crown') {
+    } else if (hat === 'crown' || hat === 'gold_crown') {
       const goldMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.85, roughness: 0.25 });
       const crownBase = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.3, 1.36), goldMat);
       crownBase.castShadow = true;
@@ -1010,6 +1536,56 @@ export class RobloxAvatar {
       const gem = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.1), rubyMat);
       gem.position.set(0, 0.05, 0.7);
       this.hatGroup.add(gem);
+    } else if (hat === 'ninja_headband') {
+      const clothMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 });
+      const plateMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.85, roughness: 0.2 });
+      const emblemMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0x991b1b, emissiveIntensity: 0.4 });
+      const band = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.26, 1.36), clothMat);
+      band.position.set(0, -0.15, 0);
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.22, 0.12), plateMat);
+      plate.position.set(0, -0.15, 0.67);
+      const emblem = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.05), emblemMat);
+      emblem.position.set(0, -0.15, 0.73);
+      const tailL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.55, 0.06), clothMat);
+      tailL.position.set(-0.22, -0.35, -0.74);
+      tailL.rotation.set(0.35, 0, -0.25);
+      const tailR = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.55, 0.06), clothMat);
+      tailR.position.set(0.22, -0.35, -0.74);
+      tailR.rotation.set(0.35, 0, 0.25);
+      this.hatGroup.add(band, plate, emblem, tailL, tailR);
+    } else if (hat === 'valkyrie_helm') {
+      const goldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8, roughness: 0.2 });
+      const wingMat = new THREE.MeshStandardMaterial({
+        color: 0xe0f2fe,
+        emissive: 0x38bdf8,
+        emissiveIntensity: 0.35,
+        roughness: 0.25,
+      });
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.74, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), goldMat);
+      dome.position.set(0, -0.1, 0);
+      const crest = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.4, 0.9), goldMat);
+      crest.position.set(0, 0.45, 0);
+      [-1, 1].forEach((side) => {
+        const wing1 = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.85, 0.55), wingMat);
+        wing1.position.set(side * 0.82, 0.22, -0.05);
+        wing1.rotation.z = side * -0.45;
+        wing1.rotation.x = -0.2;
+        const wing2 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.65, 0.38), wingMat);
+        wing2.position.set(side * 1.0, 0.45, -0.22);
+        wing2.rotation.z = side * -0.6;
+        this.hatGroup.add(wing1, wing2);
+      });
+      this.hatGroup.add(dome, crest);
+    } else if (hat === 'top_hat') {
+      const hatMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.45 });
+      const ribbonMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.35 });
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.08, 16), hatMat);
+      brim.position.set(0, 0.02, 0);
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.62, 0.85, 16), hatMat);
+      crown.position.set(0, 0.45, 0);
+      const ribbon = new THREE.Mesh(new THREE.CylinderGeometry(0.63, 0.63, 0.14, 16), ribbonMat);
+      ribbon.position.set(0, 0.14, 0);
+      this.hatGroup.add(brim, crown, ribbon);
     } else if (hat === 'headphones') {
       const hpMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, metalness: 0.3, roughness: 0.4 });
       const bandMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3 });
@@ -1054,6 +1630,76 @@ export class RobloxAvatar {
       hornR.position.set(0.75, 0.2, 0);
       hornR.rotation.z = -0.6;
       this.hatGroup.add(dome, hornL, hornR);
+    } else if (hat === '6b47_helmet') {
+      // Russian 6B47 Olive-Drab Ballistic Helmet with NVG Mount & Black Chin Strap (Военный)
+      const oliveShellMat = new THREE.MeshStandardMaterial({ color: 0x39412c, roughness: 0.72, metalness: 0.08 });
+      const darkOliveMat = new THREE.MeshStandardMaterial({ color: 0x262c1e, roughness: 0.65, metalness: 0.14 });
+      const strapMat = new THREE.MeshStandardMaterial({ color: 0x141614, roughness: 0.75 });
+
+      // Main curved ballistic shell dome — sits cleanly above the eyebrows (y_hat = -0.20)
+      const dome = new THREE.Mesh(
+        new THREE.SphereGeometry(0.84, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.5),
+        oliveShellMat
+      );
+      dome.position.set(0, -0.20, -0.02);
+      dome.scale.set(1.04, 0.82, 1.08);
+      dome.castShadow = true;
+      this.hatGroup.add(dome);
+
+      // Rear & ear protective neck skirt arc (open across the front face)
+      const skirt = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.84, 0.87, 0.28, 22, 1, false, Math.PI * 0.44, Math.PI * 1.12),
+        oliveShellMat
+      );
+      skirt.position.set(0, -0.32, -0.02);
+      skirt.scale.set(1.04, 1, 1.08);
+      skirt.castShadow = true;
+      this.hatGroup.add(skirt);
+
+      // Brow rim band along the upper forehead edge of the shell (above eyebrows)
+      const browRim = new THREE.Mesh(
+        new THREE.TorusGeometry(0.84, 0.032, 8, 24, Math.PI * 1.05),
+        darkOliveMat
+      );
+      browRim.rotation.x = Math.PI / 2;
+      browRim.rotation.z = -Math.PI * 0.525;
+      browRim.scale.set(1.04, 1.08, 1);
+      browRim.position.set(0, -0.20, -0.02);
+      this.hatGroup.add(browRim);
+
+      // Front NVG Shroud Mount centered on the helmet front
+      const nvgMount = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.28, 0.10), darkOliveMat);
+      nvgMount.position.set(0, 0.02, 0.86);
+      nvgMount.rotation.x = -0.25;
+      nvgMount.castShadow = true;
+
+      const nvgInner = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.05), strapMat);
+      nvgInner.position.set(0, 0.02, 0.90);
+      nvgInner.rotation.x = -0.25;
+      this.hatGroup.add(nvgMount, nvgInner);
+
+      // Left-side tactical rail & NVG/goggle retention peg
+      const sideRail = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.28), darkOliveMat);
+      sideRail.position.set(-0.86, -0.24, 0.12);
+      const sidePeg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), strapMat);
+      sidePeg.position.set(-0.91, -0.24, 0.18);
+      this.hatGroup.add(sideRail, sidePeg);
+
+      // Black Chin Strap wrapping along the sides and cleanly under the chin
+      const sideStrapL = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.96, 0.07), strapMat);
+      sideStrapL.position.set(-0.67, -0.78, 0.14);
+      sideStrapL.rotation.z = -0.10;
+      sideStrapL.rotation.x = 0.22;
+
+      const sideStrapR = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.96, 0.07), strapMat);
+      sideStrapR.position.set(0.67, -0.78, 0.14);
+      sideStrapR.rotation.z = 0.10;
+      sideStrapR.rotation.x = 0.22;
+
+      const chinBar = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.065, 0.09), strapMat);
+      chinBar.position.set(0, -1.27, 0.26);
+
+      this.hatGroup.add(sideStrapL, sideStrapR, chinBar);
     }
   }
 
@@ -1335,6 +1981,82 @@ export class RobloxAvatar {
       });
 
       this.backpackGroup.add(packGroup);
+    } else if (backpack === 'golden_jetpack') {
+      const packGroup = new THREE.Group();
+      packGroup.name = 'GoldenJetpack';
+
+      const goldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.85, roughness: 0.2 });
+      const darkTrimMat = new THREE.MeshStandardMaterial({ color: 0x78350f, metalness: 0.5, roughness: 0.35 });
+      const cyanFlameMat = new THREE.MeshStandardMaterial({
+        color: 0x38bdf8,
+        emissive: 0x0284c7,
+        emissiveIntensity: 0.9,
+        roughness: 0.2,
+      });
+
+      const core = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.4, 0.6), goldMat);
+      core.position.set(0, 0.25, -0.2);
+      core.castShadow = true;
+      packGroup.add(core);
+
+      [-0.7, 0.7].forEach((xOffset, idx) => {
+        const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.35, 14), goldMat);
+        tank.position.set(xOffset, 0.22, -0.22);
+        tank.castShadow = true;
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), darkTrimMat);
+        cap.position.set(xOffset, 0.88, -0.22);
+        const plume = new THREE.Group();
+        plume.name = `JetpackPlume_${idx}`;
+        plume.position.set(xOffset, -0.88, -0.22);
+        const flameCone = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.82, 8), cyanFlameMat);
+        flameCone.rotation.x = Math.PI;
+        plume.add(flameCone);
+        packGroup.add(tank, cap, plume);
+      });
+
+      this.backpackGroup.add(packGroup);
+    } else if (backpack === 'neon_wings') {
+      const packGroup = new THREE.Group();
+      packGroup.name = 'NeonWings';
+
+      const coreMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.6, roughness: 0.3 });
+      const cyanMat = new THREE.MeshStandardMaterial({
+        color: 0x22d3ee,
+        emissive: 0x06b6d4,
+        emissiveIntensity: 0.85,
+        roughness: 0.2,
+      });
+      const pinkMat = new THREE.MeshStandardMaterial({
+        color: 0xf472b6,
+        emissive: 0xdb2777,
+        emissiveIntensity: 0.75,
+        roughness: 0.2,
+      });
+
+      const mount = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.35), coreMat);
+      mount.position.set(0, 0.3, -0.15);
+      packGroup.add(mount);
+
+      [-1, 1].forEach((side) => {
+        const outerWing = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.45, 0.1), cyanMat);
+        outerWing.position.set(side * 1.15, 0.7, -0.3);
+        outerWing.rotation.z = side * 0.38;
+        outerWing.rotation.y = side * -0.22;
+
+        const innerWing = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.32, 0.1), pinkMat);
+        innerWing.position.set(side * 0.95, 0.25, -0.28);
+        innerWing.rotation.z = side * 0.18;
+        innerWing.rotation.y = side * -0.22;
+
+        const lowerFeather = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.24, 0.1), cyanMat);
+        lowerFeather.position.set(side * 0.78, -0.12, -0.25);
+        lowerFeather.rotation.z = side * -0.08;
+        lowerFeather.rotation.y = side * -0.22;
+
+        packGroup.add(outerWing, innerWing, lowerFeather);
+      });
+
+      this.backpackGroup.add(packGroup);
     }
   }
 
@@ -1473,6 +2195,30 @@ export class RobloxAvatar {
     return group;
   }
 
+  private createPollenScooper(): THREE.Group {
+    const group = new THREE.Group();
+    group.name = 'PollenScooper';
+
+    const handleMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.7 });
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.7, roughness: 0.25 });
+    const rimMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.5, roughness: 0.3 });
+
+    // Handle
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.8, 8), handleMat);
+    handle.position.set(0, 0.5, 0);
+
+    // Scooper Shovel Head
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.12, 0.75), headMat);
+    head.position.set(0, 1.35, 0.15);
+
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.16, 6), rimMat);
+    rim.position.set(0, 1.38, 0.15);
+
+    group.add(handle, head, rim);
+    group.rotation.x = Math.PI / 4;
+    return group;
+  }
+
   public setEquippedTool(tool: ToolType) {
     this.swordMesh.visible = tool === 'sword';
     this.speedCoilMesh.visible = tool === 'speed_coil';
@@ -1480,11 +2226,99 @@ export class RobloxAvatar {
     this.hammerMesh.visible = tool === 'hammer';
     this.jetpackRemoteMesh.visible = tool === 'jetpack_boost';
     this.bloxyColaMesh.visible = tool === 'bloxy_cola';
+    this.pollenScooperMesh.visible = tool === 'pollen_collector';
+    this.portalGunMesh.visible = tool === 'portal_gun';
+  }
+
+  public setPortalGunColor(kind: PortalKind, animTime: number = 0) {
+    this.portalGunHandle.setMode(kind, animTime);
   }
 
   public triggerAttack() {
     this.isAttacking = true;
     this.attackTimer = 0;
+  }
+
+  public triggerEmote(emoteId: EmoteId, durationMs?: number) {
+    const def = getEmoteById(emoteId);
+    const resolvedDurationMs = typeof durationMs === 'number' && durationMs > 0 ? durationMs : def.durationMs;
+    this.activeEmote = emoteId;
+    this.emoteTimer = 0;
+    this.emoteDuration = Math.max(0.8, Math.min(8.0, resolvedDurationMs / 1000));
+    this.setEmoteBubble(def.emoji, def.label, def.accentColor);
+  }
+
+  public clearEmote() {
+    this.activeEmote = null;
+    this.emoteTimer = 0;
+    this.emoteDuration = 0;
+    this.removeEmoteBubble();
+  }
+
+  private removeEmoteBubble() {
+    if (this.emoteBubbleSprite) {
+      this.root.remove(this.emoteBubbleSprite);
+      this.emoteBubbleSprite.material.map?.dispose();
+      this.emoteBubbleSprite.material.dispose();
+      this.emoteBubbleSprite = null;
+    }
+  }
+
+  private setEmoteBubble(emoji: string, label: string, accentColor: string) {
+    this.removeEmoteBubble();
+    if (typeof document === 'undefined') return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 96;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Rounded speech badge
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    ctx.beginPath();
+    ctx.roundRect(10, 8, 236, 72, 24);
+    ctx.fill();
+
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.roundRect(10, 8, 236, 72, 24);
+    ctx.stroke();
+
+    ctx.font = '38px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(emoji, 28, 45);
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 26px sans-serif';
+    ctx.fillText(label.slice(0, 10), 82, 45);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.name = 'AvatarEmoteBubble';
+    sprite.scale.set(2.5, 0.94, 1);
+    sprite.position.set(0, 7.1, 0);
+    this.root.add(sprite);
+    this.emoteBubbleSprite = sprite;
+  }
+
+  private dampNonEmoteTransforms(dt: number) {
+    this.bodyPivot.position.y = THREE.MathUtils.damp(this.bodyPivot.position.y, 3, 14, dt);
+    this.bodyPivot.rotation.x = THREE.MathUtils.damp(this.bodyPivot.rotation.x, 0, 14, dt);
+    this.bodyPivot.rotation.y = THREE.MathUtils.damp(this.bodyPivot.rotation.y, 0, 14, dt);
+    this.bodyPivot.rotation.z = THREE.MathUtils.damp(this.bodyPivot.rotation.z, 0, 14, dt);
+    this.torsoMesh.rotation.x = THREE.MathUtils.damp(this.torsoMesh.rotation.x, 0, 12, dt);
+    this.torsoMesh.rotation.z = THREE.MathUtils.damp(this.torsoMesh.rotation.z, 0, 12, dt);
+    this.headGroup.rotation.x = THREE.MathUtils.damp(this.headGroup.rotation.x, 0, 12, dt);
+    this.headGroup.rotation.z = THREE.MathUtils.damp(this.headGroup.rotation.z, 0, 12, dt);
+    this.leftArmGroup.rotation.z = THREE.MathUtils.damp(this.leftArmGroup.rotation.z, 0, 12, dt);
+    this.rightArmGroup.rotation.z = THREE.MathUtils.damp(this.rightArmGroup.rotation.z, 0, 12, dt);
+    this.leftLegGroup.rotation.z = THREE.MathUtils.damp(this.leftLegGroup.rotation.z, 0, 12, dt);
+    this.rightLegGroup.rotation.z = THREE.MathUtils.damp(this.rightLegGroup.rotation.z, 0, 12, dt);
   }
 
   public update(dt: number, time: number) {
@@ -1507,6 +2341,11 @@ export class RobloxAvatar {
       plume1.rotation.y = -time * 3.5;
     }
 
+    // Floating emote bubble subtle hover
+    if (this.emoteBubbleSprite) {
+      this.emoteBubbleSprite.position.y = 7.1 + Math.sin(time * 5.5) * 0.12;
+    }
+
     // 2. Attack swing animation
     if (this.isAttacking) {
       this.attackTimer += dt * 8;
@@ -1519,8 +2358,203 @@ export class RobloxAvatar {
       return;
     }
 
-    // 3. Emote Dance
+    // 3. Timed Emotes (from Emote Selection Menu) or Infinite Tool Dance
+    if (this.activeEmote) {
+      this.emoteTimer += dt;
+      if (this.emoteTimer >= this.emoteDuration) {
+        this.clearEmote();
+      } else {
+        const t = this.emoteTimer;
+        const p = Math.min(1, t / Math.max(0.1, this.emoteDuration));
+
+        if (this.activeEmote === 'wave') {
+          this.bodyPivot.position.y = 3 + (this.isMoving ? 0 : Math.abs(Math.sin(t * 4.5)) * 0.12);
+          this.bodyPivot.rotation.set(0, 0, 0);
+          this.torsoMesh.rotation.set(0, Math.sin(t * 3.5) * 0.12, Math.sin(t * 5) * 0.05);
+          this.headGroup.rotation.set(-0.05, Math.sin(t * 3.5) * 0.18, Math.sin(t * 5) * 0.1);
+          this.rightArmGroup.rotation.x = -0.45;
+          this.rightArmGroup.rotation.z = 2.45 + Math.sin(t * 11) * 0.42;
+          if (this.isMoving) {
+            const swing = Math.sin(this.walkPhase) * 0.85;
+            this.leftLegGroup.rotation.x = swing;
+            this.rightLegGroup.rotation.x = -swing;
+            this.leftArmGroup.rotation.x = -swing * 0.6;
+          } else {
+            this.leftArmGroup.rotation.x = THREE.MathUtils.damp(this.leftArmGroup.rotation.x, 0.08, 12, dt);
+            this.leftLegGroup.rotation.x = THREE.MathUtils.damp(this.leftLegGroup.rotation.x, 0, 12, dt);
+            this.rightLegGroup.rotation.x = THREE.MathUtils.damp(this.rightLegGroup.rotation.x, 0, 12, dt);
+          }
+          this.leftArmGroup.rotation.z = THREE.MathUtils.damp(this.leftArmGroup.rotation.z, -0.14, 12, dt);
+          return;
+        }
+
+        if (this.activeEmote === 'dance') {
+          const groove = Math.sin(t * 7.5);
+          const grooveCos = Math.cos(t * 7.5);
+          this.bodyPivot.position.y = 3 + Math.abs(groove) * 0.24;
+          this.bodyPivot.rotation.set(0, 0, 0);
+          this.torsoMesh.rotation.set(0, groove * 0.45, Math.cos(t * 3.75) * 0.12);
+          this.headGroup.rotation.set(Math.abs(groove) * 0.14, -groove * 0.3, Math.sin(t * 3.75) * 0.1);
+          this.leftArmGroup.rotation.x = -1.6 + grooveCos * 0.85;
+          this.rightArmGroup.rotation.x = -1.6 - grooveCos * 0.85;
+          this.leftArmGroup.rotation.z = -0.35 - Math.abs(groove) * 0.35;
+          this.rightArmGroup.rotation.z = 0.35 + Math.abs(groove) * 0.35;
+          if (this.isMoving) {
+            const swing = Math.sin(this.walkPhase) * 0.85;
+            this.leftLegGroup.rotation.x = swing;
+            this.rightLegGroup.rotation.x = -swing;
+          } else {
+            this.leftLegGroup.rotation.x = groove * 0.48;
+            this.rightLegGroup.rotation.x = -groove * 0.48;
+          }
+          return;
+        }
+
+        if (this.activeEmote === 'laugh') {
+          const shake = Math.sin(t * 18);
+          this.bodyPivot.position.y = 3 + (this.isMoving ? 0 : Math.abs(Math.sin(t * 9)) * 0.2);
+          this.bodyPivot.rotation.set(0, 0, 0);
+          this.torsoMesh.rotation.set(-0.2 + shake * 0.08, Math.sin(t * 6) * 0.1, Math.sin(t * 9) * 0.07);
+          this.headGroup.rotation.set(-0.38 + shake * 0.16, Math.sin(t * 7) * 0.12, 0);
+          this.leftArmGroup.rotation.x = -1.15 + shake * 0.22;
+          this.rightArmGroup.rotation.x = -1.15 - shake * 0.22;
+          this.leftArmGroup.rotation.z = 0.38;
+          this.rightArmGroup.rotation.z = -0.38;
+          if (this.isMoving) {
+            const swing = Math.sin(this.walkPhase) * 0.85;
+            this.leftLegGroup.rotation.x = swing;
+            this.rightLegGroup.rotation.x = -swing;
+          } else {
+            this.leftLegGroup.rotation.x = THREE.MathUtils.damp(this.leftLegGroup.rotation.x, -0.18, 12, dt);
+            this.rightLegGroup.rotation.x = THREE.MathUtils.damp(this.rightLegGroup.rotation.x, 0.18, 12, dt);
+          }
+          return;
+        }
+
+        if (this.activeEmote === 'cheer') {
+          const hop = this.isMoving ? 0 : Math.abs(Math.sin(t * 6.5)) * 0.65;
+          this.bodyPivot.position.y = 3 + hop;
+          this.bodyPivot.rotation.set(0, 0, 0);
+          this.torsoMesh.rotation.set(-0.08, Math.sin(t * 4) * 0.15, 0);
+          this.headGroup.rotation.set(-0.18, Math.sin(t * 4) * 0.12, 0);
+          this.leftArmGroup.rotation.x = -2.65;
+          this.rightArmGroup.rotation.x = -2.65;
+          this.leftArmGroup.rotation.z = -0.45 - Math.sin(t * 10) * 0.22;
+          this.rightArmGroup.rotation.z = 0.45 + Math.sin(t * 10) * 0.22;
+          if (this.isMoving) {
+            const swing = Math.sin(this.walkPhase) * 0.85;
+            this.leftLegGroup.rotation.x = swing;
+            this.rightLegGroup.rotation.x = -swing;
+          } else {
+            this.leftLegGroup.rotation.x = -hop * 0.35;
+            this.rightLegGroup.rotation.x = hop * 0.35;
+          }
+          return;
+        }
+
+        if (this.activeEmote === 'salute') {
+          this.bodyPivot.position.y = 3;
+          this.bodyPivot.rotation.set(0, 0, 0);
+          this.torsoMesh.rotation.set(0, 0, 0);
+          this.headGroup.rotation.set(-0.06, 0, 0);
+          this.rightArmGroup.rotation.x = THREE.MathUtils.damp(this.rightArmGroup.rotation.x, -2.25, 16, dt);
+          this.rightArmGroup.rotation.z = THREE.MathUtils.damp(this.rightArmGroup.rotation.z, -0.45, 16, dt);
+          this.leftArmGroup.rotation.z = THREE.MathUtils.damp(this.leftArmGroup.rotation.z, -0.05, 14, dt);
+          if (this.isMoving) {
+            const swing = Math.sin(this.walkPhase) * 0.85;
+            this.leftLegGroup.rotation.x = swing;
+            this.rightLegGroup.rotation.x = -swing;
+            this.leftArmGroup.rotation.x = -swing * 0.5;
+          } else {
+            this.leftArmGroup.rotation.x = THREE.MathUtils.damp(this.leftArmGroup.rotation.x, 0, 14, dt);
+            this.leftLegGroup.rotation.x = THREE.MathUtils.damp(this.leftLegGroup.rotation.x, 0, 14, dt);
+            this.rightLegGroup.rotation.x = THREE.MathUtils.damp(this.rightLegGroup.rotation.x, 0, 14, dt);
+          }
+          return;
+        }
+
+        if (this.activeEmote === 'flip') {
+          // 360-degree celebratory backflip arc
+          let lift = 0;
+          let flipAngle = 0;
+          let tuck = 0;
+          if (p < 0.16) {
+            const wind = p / 0.16;
+            lift = -0.28 * Math.sin(wind * Math.PI * 0.5);
+            tuck = 0.35 * wind;
+          } else if (p < 0.82) {
+            const air = (p - 0.16) / 0.66;
+            lift = Math.sin(air * Math.PI) * 2.6;
+            flipAngle = -air * Math.PI * 2;
+            tuck = Math.sin(air * Math.PI) * 0.9;
+          } else {
+            const land = (p - 0.82) / 0.18;
+            lift = -0.22 * Math.sin(land * Math.PI);
+            flipAngle = -Math.PI * 2;
+            tuck = 0;
+          }
+          this.bodyPivot.position.y = 3 + lift;
+          this.bodyPivot.rotation.set(flipAngle, 0, 0);
+          this.torsoMesh.rotation.set(0, 0, 0);
+          this.headGroup.rotation.set(-tuck * 0.3, 0, 0);
+          this.leftArmGroup.rotation.x = -2.2 + tuck * 0.4;
+          this.rightArmGroup.rotation.x = -2.2 + tuck * 0.4;
+          this.leftArmGroup.rotation.z = -0.25;
+          this.rightArmGroup.rotation.z = 0.25;
+          this.leftLegGroup.rotation.x = -tuck;
+          this.rightLegGroup.rotation.x = -tuck;
+          return;
+        }
+
+        if (this.activeEmote === 'thumbs_up') {
+          const bounce = this.isMoving ? 0 : Math.abs(Math.sin(t * 4.2)) * 0.1;
+          this.bodyPivot.position.y = 3 + bounce;
+          this.bodyPivot.rotation.set(0, 0, 0);
+          this.torsoMesh.rotation.set(-0.04, -0.18, 0.06);
+          this.headGroup.rotation.set(Math.sin(t * 5) * 0.12 - 0.06, 0.12, -0.05);
+          this.rightArmGroup.rotation.x = THREE.MathUtils.damp(this.rightArmGroup.rotation.x, -1.48, 15, dt);
+          this.rightArmGroup.rotation.z = THREE.MathUtils.damp(this.rightArmGroup.rotation.z, 0.28 + Math.sin(t * 6) * 0.08, 15, dt);
+          this.leftArmGroup.rotation.z = THREE.MathUtils.damp(this.leftArmGroup.rotation.z, -0.32, 12, dt);
+          if (this.isMoving) {
+            const swing = Math.sin(this.walkPhase) * 0.85;
+            this.leftLegGroup.rotation.x = swing;
+            this.rightLegGroup.rotation.x = -swing;
+            this.leftArmGroup.rotation.x = -swing * 0.5;
+          } else {
+            this.leftArmGroup.rotation.x = THREE.MathUtils.damp(this.leftArmGroup.rotation.x, -0.25, 12, dt);
+            this.leftLegGroup.rotation.x = THREE.MathUtils.damp(this.leftLegGroup.rotation.x, 0, 12, dt);
+            this.rightLegGroup.rotation.x = THREE.MathUtils.damp(this.rightLegGroup.rotation.x, 0, 12, dt);
+          }
+          return;
+        }
+
+        if (this.activeEmote === 'peace') {
+          const groove = Math.sin(t * 5.2);
+          this.bodyPivot.position.y = 3 + (this.isMoving ? 0 : Math.abs(groove) * 0.14);
+          this.bodyPivot.rotation.set(0, 0, 0);
+          this.torsoMesh.rotation.set(0, groove * 0.18, -0.08 + groove * 0.06);
+          this.headGroup.rotation.set(-0.08, -groove * 0.15, 0.16);
+          this.rightArmGroup.rotation.x = THREE.MathUtils.damp(this.rightArmGroup.rotation.x, -1.95, 16, dt);
+          this.rightArmGroup.rotation.z = THREE.MathUtils.damp(this.rightArmGroup.rotation.z, 0.62 + groove * 0.14, 16, dt);
+          this.leftArmGroup.rotation.z = THREE.MathUtils.damp(this.leftArmGroup.rotation.z, -0.42 - Math.abs(groove) * 0.12, 14, dt);
+          if (this.isMoving) {
+            const swing = Math.sin(this.walkPhase) * 0.85;
+            this.leftLegGroup.rotation.x = swing;
+            this.rightLegGroup.rotation.x = -swing;
+            this.leftArmGroup.rotation.x = -swing * 0.5;
+          } else {
+            this.leftArmGroup.rotation.x = THREE.MathUtils.damp(this.leftArmGroup.rotation.x, 0.15, 14, dt);
+            this.leftLegGroup.rotation.x = THREE.MathUtils.damp(this.leftLegGroup.rotation.x, 0.14, 12, dt);
+            this.rightLegGroup.rotation.x = THREE.MathUtils.damp(this.rightLegGroup.rotation.x, -0.14, 12, dt);
+          }
+          return;
+        }
+      }
+    }
+
     if (this.isEmoting) {
+      this.bodyPivot.position.y = 3 + Math.abs(Math.sin(time * 6)) * 0.18;
+      this.bodyPivot.rotation.set(0, 0, 0);
       const danceAngle = Math.sin(time * 6) * 0.45;
       const danceArm = Math.cos(time * 6) * 0.9;
       this.torsoMesh.rotation.y = danceAngle;
@@ -1531,6 +2565,8 @@ export class RobloxAvatar {
       this.rightLegGroup.rotation.x = -danceAngle * 0.5;
       return;
     }
+
+    this.dampNonEmoteTransforms(dt);
 
     // 4. In Air (Jumping or Falling)
     if (!this.isGrounded) {
@@ -1555,8 +2591,8 @@ export class RobloxAvatar {
     } else {
       // Idle Breathing
       const breath = Math.sin(time * 2.5) * 0.04;
-      this.torsoMesh.position.y = 3 + breath;
-      this.headGroup.position.y = 4.7 + breath;
+      this.torsoMesh.position.y = breath;
+      this.headGroup.position.y = 1.7 + breath;
       this.leftArmGroup.rotation.x = THREE.MathUtils.damp(this.leftArmGroup.rotation.x, 0, 10, dt);
       this.rightArmGroup.rotation.x = THREE.MathUtils.damp(this.rightArmGroup.rotation.x, 0, 10, dt);
       this.leftLegGroup.rotation.x = THREE.MathUtils.damp(this.leftLegGroup.rotation.x, 0, 10, dt);
@@ -1566,14 +2602,86 @@ export class RobloxAvatar {
     }
   }
 
-  public setNameplate(nameText: string, accentColor: string = '#38bdf8') {
-    const existing = this.headGroup.getObjectByName('AvatarNameplate');
+  public setNameplate(
+    nameText: string,
+    accentColor: string = '#38bdf8',
+    playerTitle?: PlayerTitle | null
+  ) {
+    const existing = this.headGroup.getObjectByName('AvatarNameplate') as THREE.Sprite | undefined;
     if (existing) {
+      existing.material.map?.dispose();
+      existing.material.dispose();
       this.headGroup.remove(existing);
     }
     if (!nameText) return;
 
     const canvas = document.createElement('canvas');
+    if (playerTitle) {
+      canvas.width = 440;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d')!;
+
+      // Top ribbon: Player Title prefix
+      const titleText = `${playerTitle.icon} ${playerTitle.label.toUpperCase()}`;
+      ctx.font = '900 20px sans-serif';
+      const measuredTitleW = ctx.measureText(titleText).width;
+      const ribbonW = Math.min(416, Math.max(196, Math.ceil(measuredTitleW + 44)));
+      const ribbonX = Math.round((canvas.width - ribbonW) / 2);
+
+      const grad = ctx.createLinearGradient(ribbonX, 8, ribbonX + ribbonW, 48);
+      grad.addColorStop(0, playerTitle.bgFrom);
+      grad.addColorStop(1, playerTitle.bgTo);
+
+      ctx.save();
+      ctx.shadowColor = playerTitle.borderColor;
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.roundRect(ribbonX, 8, ribbonW, 40, 14);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.strokeStyle = playerTitle.borderColor;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(ribbonX, 8, ribbonW, 40, 14);
+      ctx.stroke();
+
+      ctx.fillStyle = playerTitle.textColor;
+      ctx.font = '900 20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(titleText, canvas.width / 2, 29);
+
+      // Bottom pill: Player Name
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+      ctx.beginPath();
+      ctx.roundRect(42, 56, 356, 62, 20);
+      ctx.fill();
+
+      ctx.strokeStyle = playerTitle.borderColor || accentColor;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.roundRect(42, 56, 356, 62, 20);
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 30px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(nameText.slice(0, 16), canvas.width / 2, 88);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+      const sprite = new THREE.Sprite(mat);
+      sprite.name = 'AvatarNameplate';
+      sprite.scale.set(3.45, 1.0, 1);
+      sprite.position.set(0, 1.82, 0);
+      this.headGroup.add(sprite);
+      return;
+    }
+
     canvas.width = 320;
     canvas.height = 72;
     const ctx = canvas.getContext('2d')!;
@@ -1607,6 +2715,8 @@ export class RobloxAvatar {
   }
 
   public dispose() {
+    this.removeEmoteBubble();
+    this.headMesh.geometry.dispose();
     this.headMaterial.dispose();
     this.torsoMaterial.dispose();
     this.sleeveMaterial.dispose();
@@ -1619,6 +2729,12 @@ export class RobloxAvatar {
     }
     if (this.legsTexture) {
       this.legsTexture.dispose();
+    }
+    if (this.leftSleeveTexture) {
+      this.leftSleeveTexture.dispose();
+    }
+    if (this.rightSleeveTexture) {
+      this.rightSleeveTexture.dispose();
     }
     const existing = this.headGroup.getObjectByName('AvatarNameplate') as THREE.Sprite | undefined;
     if (existing) {

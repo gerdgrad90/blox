@@ -1,0 +1,157 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public Blox Hub player profile storing username, bio, avatar skin, currency, and role.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth user ID."
+        },
+        "username": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 16,
+          "pattern": "^[a-zA-Z0-9_]+$",
+          "description": "Unique-style in-game Blox Hub username."
+        },
+        "bio": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Short player status or motto."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["player"],
+          "description": "Fixed player role assigned on registration."
+        },
+        "coins": {
+          "type": "number",
+          "description": "Blox coins balance."
+        },
+        "gems": {
+          "type": "number",
+          "description": "Blox gems balance."
+        },
+        "skinColor": {
+          "type": "string",
+          "maxLength": 16,
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "torsoColor": {
+          "type": "string",
+          "maxLength": 16,
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "legsColor": {
+          "type": "string",
+          "maxLength": 16,
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "headShape": {
+          "type": "string",
+          "enum": ["round", "blocky"]
+        },
+        "hat": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "face": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "outfit": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "shirt": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "pants": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "backpack": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownedItems": {
+          "type": "array",
+          "description": "Unlocked catalog skin and accessory item IDs (max 50)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "username",
+        "role",
+        "coins",
+        "gems",
+        "skinColor",
+        "torsoColor",
+        "legsColor",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Owner-only PII record for an authenticated Blox Hub user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Player profile storing Blox username, avatar skin, and currency."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Owner-isolated PII subcollection storing email and Google display name."
+    }
+  }
+}

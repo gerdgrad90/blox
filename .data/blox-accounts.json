@@ -1,0 +1,91 @@
+{
+  "accounts": [
+    {
+      "uid": "u_bbf92b61bc7738fbdd7d",
+      "username": "gerdgrad92",
+      "usernameLower": "gerdgrad92",
+      "bio": "",
+      "role": "player",
+      "coins": 6235,
+      "gems": 0,
+      "skin": {
+        "name": "gerdgrad92",
+        "skinColor": "#e5c298",
+        "torsoColor": "#141619",
+        "legsColor": "#18181b",
+        "headShape": "round",
+        "hat": "rocker_hair",
+        "face": "cool",
+        "outfit": "rock_jacket",
+        "shirt": "rock_jacket",
+        "pants": "rock_jeans",
+        "backpack": "fuel_jetpack"
+      },
+      "ownedItems": [
+        "rocker_hair",
+        "cap",
+        "6b47_helmet",
+        "rock_jacket",
+        "pizza_tee",
+        "rus_emr_vest",
+        "squiggly",
+        "smile",
+        "eye_scar",
+        "fuel_jetpack",
+        "roblox_classic"
+      ],
+      "passwordSalt": "368f75e36a92f416d8a171ac32625e05",
+      "passwordHash": "6cf6dfeb0e5ccced28dde27f7941d12a29acfd166696c13168d760e9bd83b64e6200c9d96c4a66b0ddaddc3f06bc2dbc6c8be47888aa55fc244b1ae08e3850b7",
+      "createdAt": 1794684676027,
+      "updatedAt": 1794838912858,
+      "unlockedAchievements": {},
+      "lifetimeStats": {
+        "totalJumps": 0,
+        "totalDeaths": 5
+      }
+    },
+    {
+      "uid": "u_c8061bf6d5fc3e71cecc",
+      "username": "SyncTest_30727",
+      "usernameLower": "synctest_30727",
+      "bio": "test",
+      "role": "player",
+      "coins": 250,
+      "gems": 5,
+      "skin": {
+        "name": "SyncTest_30727",
+        "skinColor": "#e5c298",
+        "torsoColor": "#141619",
+        "legsColor": "#18181b",
+        "headShape": "round",
+        "hat": "rocker_hair",
+        "face": "squiggly",
+        "outfit": "rock_jacket",
+        "shirt": "rock_jacket",
+        "pants": "rock_jeans",
+        "backpack": "fuel_jetpack"
+      },
+      "ownedItems": [
+        "rocker_hair",
+        "cap",
+        "rock_jacket",
+        "pizza_tee",
+        "squiggly",
+        "smile",
+        "fuel_jetpack",
+        "roblox_classic"
+      ],
+      "passwordSalt": "b746a9451d054339f22d8cfb7f498575",
+      "passwordHash": "7f7f25e3684b176a000aa0cd32b69ec1c5ab5662536478c8710b1ae73a798a99c21c892f2b6a83799a6a8012b5bbd418f2af593f315dca1bea80699d28ba88c8",
+      "createdAt": 1794685218368,
+      "updatedAt": 1794685218382
+    },
+    null
+  ],
+  "sessions": {
+    "d763cb86fb558458e05c63e7619d0b1cc6de3267564b28daf97af0edc9784e7b": "u_bbf92b61bc7738fbdd7d",
+    "55a32ca5e5f0efbe3de173d758e0f37b42e3012c69f9eee6a5a4ddb2ec95a21d": "u_c8061bf6d5fc3e71cecc",
+    "fab98c11b78a9c2ed14070d59e128613f98a5e031cf4c967bbb99250d615b985": "u_c8061bf6d5fc3e71cecc",
+    "eb66478677dbd31c93b57f8799f43c13670a3a2f9eb98f99a5a12cd42e3ead24": "u_78ce9023c9ca928538cd"
+  }
+}

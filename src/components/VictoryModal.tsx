@@ -35,7 +35,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
         transition={{ type: 'spring', stiffness: 360, damping: 25, mass: 0.9 }}
-        className="w-full max-w-lg rounded-3xl bg-slate-900 border-2 border-amber-500/50 shadow-[0_0_50px_rgba(245,158,11,0.25)] p-6 sm:p-8 flex flex-col items-center text-center"
+        className="w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-3xl bg-slate-900 border-2 border-amber-500/50 shadow-[0_0_50px_rgba(245,158,11,0.25)] p-5 sm:p-8 flex flex-col items-center text-center"
       >
         {/* Golden Trophy Icon Badge */}
         <motion.div
